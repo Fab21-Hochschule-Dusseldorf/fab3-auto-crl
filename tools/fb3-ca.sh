@@ -23,8 +23,14 @@ CACERT=/root/ca.crt
 CAKEY=/root/ca.key
 DEFAULT_DAYS=1095          # Gueltigkeit ausgestellter Zertifikate (3 Jahre)
 CRL_DAYS=30               # Gueltigkeit der CRL (danach "abgelaufen")
-CDP_URL=""               # z.B. http://pki.fb3-auto.hsd/fb3.crl  -> in jedes Cert
+CDP_URL=""               # z.B. https://raw.githubusercontent.com/<org>/<repo>/main/fb3.crl
 CRL_PUBLISH=""           # scp-Ziel oder lokaler Pfad, z.B. user@web:/var/www/pki/fb3.crl
+# --- Variante GitHub (Deploy-Key) ---
+GIT_REPO_DIR=""          # lokaler Klon des CRL-Repos, z.B. /root/fb3-ca/repo
+GIT_DEPLOY_KEY=""        # privater Deploy-Key, z.B. /root/.ssh/fab3-auto-crl-deploy
+GIT_BRANCH="main"
+GIT_EMAIL="ca@fb3-auto.hsd"
+GIT_NAME="fb3-ca bot"
 
 # ---- evtl. Konfig-Datei laden ----------------------------------------------
 CONF="${FB3_CA_CONF:-$CADIR/fb3-ca.conf}"
@@ -173,19 +179,39 @@ cmd_gencrl() {
   openssl ca -config "$CADIR/openssl.cnf" -gencrl -out "$CRL_OUT"
   echo "CRL geschrieben: $CRL_OUT" >&2
   openssl crl -in "$CRL_OUT" -noout -lastupdate -nextupdate >&2
-  [ -n "$CRL_PUBLISH" ] && cmd_publish
+  { [ -n "$GIT_REPO_DIR" ] || [ -n "$CRL_PUBLISH" ]; } && cmd_publish
   return 0
 }
 
 # ---- publish ---------------------------------------------------------------
 cmd_publish() {
-  [ -n "$CRL_PUBLISH" ] || die "CRL_PUBLISH ist nicht gesetzt (in $CONF)."
   [ -f "$CRL_OUT" ] || die "Keine CRL vorhanden ($CRL_OUT) - erst 'gencrl'."
+  if [ -n "$GIT_REPO_DIR" ]; then cmd_publish_git; return; fi
+  [ -n "$CRL_PUBLISH" ] || die "Weder GIT_REPO_DIR noch CRL_PUBLISH gesetzt (in $CONF)."
   case "$CRL_PUBLISH" in
     *:*) scp -q "$CRL_OUT" "$CRL_PUBLISH" ;;   # user@host:/pfad
     *)   cp "$CRL_OUT" "$CRL_PUBLISH" ;;        # lokaler Pfad
   esac
   echo "CRL veroeffentlicht nach: $CRL_PUBLISH" >&2
+}
+
+# ---- publish via GitHub (Deploy-Key) ---------------------------------------
+cmd_publish_git() {
+  command -v git >/dev/null 2>&1 || die "git nicht installiert (pkg install git)."
+  [ -d "$GIT_REPO_DIR/.git" ] || die "Kein git-Klon in $GIT_REPO_DIR."
+  GSC="ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+  [ -n "$GIT_DEPLOY_KEY" ] && GSC="$GSC -i $GIT_DEPLOY_KEY"
+  cp "$CRL_OUT" "$GIT_REPO_DIR/fb3.crl"
+  cp "$CACERT"  "$GIT_REPO_DIR/root-ca-fb3-auto.crt"
+  ( cd "$GIT_REPO_DIR" || exit 1
+    GIT_SSH_COMMAND="$GSC" git pull --rebase -q origin "$GIT_BRANCH" 2>/dev/null || true
+    git add fb3.crl root-ca-fb3-auto.crt
+    if git diff --cached --quiet; then echo "CRL unveraendert - kein Push." >&2; exit 0; fi
+    git -c user.email="$GIT_EMAIL" -c user.name="$GIT_NAME" \
+        commit -q -m "CRL update $(date -u +%Y-%m-%dT%H:%MZ)"
+    GIT_SSH_COMMAND="$GSC" git push -q origin "$GIT_BRANCH" \
+      && echo "CRL nach GitHub gepusht ($GIT_BRANCH)." >&2
+  )
 }
 
 # ---- newca -----------------------------------------------------------------
