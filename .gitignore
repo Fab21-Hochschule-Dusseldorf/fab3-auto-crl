@@ -1,0 +1,21 @@
+# NIEMALS Schlüssel oder Identitäten committen
+*.key
+*.p12
+*.pfx
+*.pem
+*.jks
+*.keystore
+# Deploy-Keys / SSH
+*deploy
+*deploy.pub
+id_ed25519*
+id_rsa*
+# lokale CA-Konfig (kann Pfade/Ziele enthalten)
+fb3-ca.conf
+# CA-Arbeitsverzeichnis (Datenbank, ausgestellte Certs, private Keys)
+fb3-ca/
+signed/
+newcerts/
+*.csr
+# macOS
+.DS_Store

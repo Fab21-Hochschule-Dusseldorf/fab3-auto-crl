@@ -1,0 +1,15 @@
+# Beispiel-Konfiguration fuer fb3-ca.sh
+# Auf der OPNsense ablegen als:  /root/fb3-ca/fb3-ca.conf
+# (wird beim Lauf automatisch geladen und ueberschreibt die Standardwerte)
+
+# CRL-URL, die in JEDES neu signierte Zertifikat geschrieben wird (crlDistributionPoint).
+# Muss per HTTP (NICHT https) dauerhaft erreichbar sein. Erst setzen, wenn das Hosting steht!
+#CDP_URL="http://pki.fb3-auto.hsd/fb3.crl"
+
+# Wohin 'gencrl'/'publish' die fertige CRL kopiert:
+#   - scp-Ziel:    user@webserver:/var/www/pki/fb3.crl
+#   - lokaler Pfad: /usr/local/www/pki/fb3.crl
+#CRL_PUBLISH="user@webserver:/var/www/pki/fb3.crl"
+
+DEFAULT_DAYS=1095      # Gueltigkeit ausgestellter Zertifikate (Tage)
+CRL_DAYS=30           # Gueltigkeit der CRL (Tage) -> oefter als das erneuern!
